@@ -17,7 +17,7 @@
 namespace HVR {
 namespace LVL1 {
 
-extern std::array<float, 3> axes_thrust_target;
+extern std::array<float, 3> axes_thrust_targets;
 extern std::array<float, 3> axes_thrust_is;
 
 extern Xasin::Drone::QuadrPropeller left_thruster;

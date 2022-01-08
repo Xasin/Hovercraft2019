@@ -13,7 +13,6 @@
 
 #include "hovercraft/level0.h"
 #include "hovercraft/level1.h"
-#include "hovercraft/level2.h"
 #include "hovercraft/telemetry.h"
 
 #include "esp_log.h"
@@ -26,8 +25,6 @@
 
 #include "xasin/propertypoint/PropertyHandler.h"
 #include "xasin/propertypoint/PropActuator.h"
-
-#include "xasin/socks/UDP.h"
 
 using namespace Xasin;
 
@@ -56,48 +53,6 @@ void smooth_set(float newMotor) {
 	oldMotor = newMotor;
 }
 
-void test_server_task(void *args) {
-	auto test_sock = Xasin::Socks::UDP("", 456);
-
-	vTaskDelay(10000);
-
-	test_sock.open_local();
-
-	char *buffer = new char[2048];
-	int written_len = 0;
-
-	ESP_LOGI("UDP", "Test port now open!");
-
-	while(true) {
-		written_len = test_sock.wait_on_receive(buffer, 2047);
-
-		if(written_len) {
-			buffer[written_len] = '\0';
-			auto parsed = cJSON_Parse(buffer);
-
-			HVR::LVL0::propHandler.feed_cJSON(parsed);
-			cJSON_Delete(parsed);
-		}
-	}
-}
-
-void motor_reinit(int count = 2000) {
-    for(int j = count; j>=0; j--) {
-		for(int i=0; i<3; i++)
-			HVR::LVL0::rawMotors.set_motor_power(i, 0.06 + 0.02 * sin(xTaskGetTickCount()/50.0));
-		vTaskDelay(2);
-    }
-}
-void spam_cmd(Xasin::Drone::DShot::dshot_cmd_t cmd) {
-    vTaskDelay(10);
-	for(int j = 300; j >= 0; j--) {
-		for(int i=0; i<3; i++) {
-			HVR::LVL0::rawMotors.send_cmd(i, cmd);
-		}
-		vTaskDelay(1);
-	}
-}
-
 extern "C" void app_main(void)
 {
     nvs_flash_init();
@@ -112,14 +67,11 @@ extern "C" void app_main(void)
 	power_config.light_sleep_enable = false;
     esp_pm_configure(&power_config);
 
-    Xasin::MQTT::Handler::start_wifi("TP-LINK_84CDC2\0", "f36eebda48\0", -1);
+    Xasin::MQTT::Handler::start_wifi("TP-LINK_84CDC2\0", "f36eebda48\0");
 
     HVR::LVL0::init();
     HVR::LVL1::init();
-    HVR::LVL2::init();
 	HVR::Telemetry::init();
-
-	xTaskCreate(test_server_task, "TestUDP", 2048, nullptr, 4, nullptr);
 
     enum mode_t {
     	ARMING,
@@ -128,25 +80,30 @@ extern "C" void app_main(void)
     TickType_t init_ticks = xTaskGetTickCount() + 10000;
 
 
-    motor_reinit(5000);
-    spam_cmd(HVR::LVL0::rawMotors.STOP);
-    spam_cmd(HVR::LVL0::rawMotors.SPIN_NORMAL);
-    motor_reinit();
-    spam_cmd(HVR::LVL0::rawMotors.STOP);
-    spam_cmd(HVR::LVL0::rawMotors.SPIN_3D);
-	motor_reinit();
-	spam_cmd(HVR::LVL0::rawMotors.STOP);
-	spam_cmd(HVR::LVL0::rawMotors.SAVE_SETTING);
-	motor_reinit();
-    spam_cmd(HVR::LVL0::rawMotors.BEACON3);
-    motor_reinit();
-    spam_cmd(HVR::LVL0::rawMotors.STOP);
-    spam_cmd(HVR::LVL0::rawMotors.SPIN_3D);
-    motor_reinit();
+	init_
+    for(int j = 1000; j>=0; j--) {
+		for(int i=0; i<3; i++)
+			HVR::LVL0::rawMotors.send_cmd(i, HVR::LVL0::rawMotors.STOP);
+		vTaskDelay(2);
+    }
+    vTaskDelay(10);
+	for(int j = 1500; j >= 0; j--) {
+		for(int i=0; i<3; i++) {
+			HVR::LVL0::rawMotors.send_cmd(i, HVR::LVL0::rawMotors.SPIN_3D);
+		}
+		vTaskDelay(1);
+	}
+	vTaskDelay(10);
+	for(int j = 1500; j >= 0; j--) {
+		for(int i=0; i<3; i++) {
+			HVR::LVL0::rawMotors.send_cmd(i, HVR::LVL0::rawMotors.SAVE_SETTING);
+		}
+		vTaskDelay(1);
+	}
 
 
     while (true) {
-    	vTaskDelay(3);
+    	vTaskDelay(2);
 
     	switch(mode) {
     	case ARMING:
@@ -155,16 +112,15 @@ extern "C" void app_main(void)
 
     		if(init_ticks < xTaskGetTickCount()) {
     			mode = NORMAL;
-    			HVR::LVL2::init();
     		}
     	break;
 
     	case NORMAL:
-    		HVR::LVL2::axis_targets[0] = 0.99 * HVR::LVL2::axis_targets[0] + 0.01 * HVR::Telemetry::control_inputs[0]*5;
-    		HVR::LVL2::axis_targets[1] = 0.99 * HVR::LVL2::axis_targets[1] + 0.01 * HVR::Telemetry::control_inputs[1]*0.2;
+    		auto t_fwd = HVR::Telemetry::control_inputs[0];
+    		auto t_rot = HVR::Telemetry::control_inputs[1];
 
-    		HVR::LVL2::run_position_calc();
-    		HVR::LVL2::run_position_pid();
+    		HVR::LVL1::axes_thrust_targets[1] = t_fwd + t_rot;
+       		HVR::LVL1::axes_thrust_targets[0] = t_fwd - t_rot;
 
         	HVR::LVL1::push_motors();
     	break;

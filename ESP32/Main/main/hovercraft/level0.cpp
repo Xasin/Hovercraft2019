@@ -13,10 +13,19 @@
 namespace HVR {
 namespace LVL0 {
 
-Xasin::Drone::DShot rawMotors = Xasin::Drone::DShot(DSHOT_TIMER, 3, DSHOT_START_GPIO);
+using namespace Xasin;
+
+Drone::DShot rawMotors = Drone::DShot(DSHOT_TIMER, 3, DSHOT_START_GPIO);
+
+Xasin::PropP::PropertyHandler propHandler = Xasin::PropP::PropertyHandler();
+Xasin::HTTP::Server telemetryServer = Xasin::HTTP::Server();
+
+Xasin::HTTP::HTTPPropChannel telemetryChannel = Xasin::HTTP::HTTPPropChannel(telemetryServer, "/", propHandler);
 
 void init() {
 	rawMotors.init();
+
+	telemetryServer.start();
 }
 
 }
